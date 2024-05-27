@@ -38,10 +38,26 @@ train_dir = os.path.join(save_path, 'train')
 val_dir = os.path.join(save_path, 'val')
 test_dir = os.path.join(save_path, 'test')
 
+yolo_dir = os.path.join(save_path, 'yolo')
+yolo_img = os.path.join(yolo_dir, 'images')
+yolo_lab = os.path.join(yolo_dir, 'labels')
+
 os.makedirs(save_path, exist_ok=True)
 os.makedirs(train_dir, exist_ok=True)
 os.makedirs(val_dir, exist_ok=True)
 os.makedirs(test_dir, exist_ok=True)
+
+os.makedirs(yolo_dir, exist_ok=True)
+os.makedirs(yolo_img, exist_ok=True)
+os.makedirs(yolo_lab, exist_ok=True)
+
+# os.makedirs(os.path.join(yolo_img, 'train'), exist_ok=True)
+# os.makedirs(os.path.join(yolo_img, 'val'), exist_ok=True)
+# os.makedirs(os.path.join(yolo_img, 'test'), exist_ok=True)
+
+# os.makedirs(os.path.join(yolo_lab, 'train'), exist_ok=True)
+# os.makedirs(os.path.join(yolo_lab, 'val'), exist_ok=True)
+# os.makedirs(os.path.join(yolo_lab, 'test'), exist_ok=True)
 
 # image, embedding, gt_mask, gt_image, gt_bbox
 os.makedirs(os.path.join(train_dir, 'gt_image'), exist_ok=True)
@@ -66,9 +82,9 @@ os.makedirs(os.path.join(test_dir, 'embeddings'), exist_ok=True)
 os.makedirs(os.path.join(test_dir, 'labels'), exist_ok=True)
 
 with open(os.path.join(save_path, 'train.yaml'), 'w') as f:
-    f.write(f"train: {os.path.join(train_dir, 'image/')}\n")
-    f.write(f"val: {os.path.join(val_dir, 'image/')}\n")
-    f.write(f"test: {os.path.join(test_dir, 'image/')}\n\nnc: 1\n\nname: ['cell']\n")
+    f.write(f"train: {os.path.join(yolo_img, 'train')}\n")
+    f.write(f"val: {os.path.join(yolo_img, 'val')}\n")
+    f.write(f"test: {os.path.join(yolo_img, 'test')}\n\nnc: 1\n\nname: ['cell']\n")
 
 if args.dataset == 'consep':
     train_files = {}
@@ -172,7 +188,6 @@ if args.dataset == 'consep':
             for file in os.listdir(os.path.join(train_dir, dir)):
                 if file.split('.')[0] in val_images:
                     shutil.move(os.path.join(train_dir, dir, file), os.path.join(val_dir, dir, file))
-
 
 elif args.dataset == 'monuseg':
     train_files = {}
@@ -378,3 +393,14 @@ elif args.dataset == 'tnbc':
                     shutil.move(os.path.join(train_dir, dir, file), os.path.join(val_dir, dir, file))
                 if file.split('.')[0] in test_images:
                     shutil.move(os.path.join(train_dir, dir, file), os.path.join(test_dir, dir, file))
+
+shutil.move(os.path.join(train_dir, 'labels'), os.path.join(yolo_lab))
+os.rename(os.path.join(yolo_lab, 'labels'), os.path.join(yolo_lab, 'train'))
+shutil.move(os.path.join(val_dir, 'labels'), os.path.join(yolo_lab))
+os.rename(os.path.join(yolo_lab, 'labels'), os.path.join(yolo_lab, 'val'))
+shutil.move(os.path.join(test_dir, 'labels'), os.path.join(yolo_lab))
+os.rename(os.path.join(yolo_lab, 'labels'), os.path.join(yolo_lab, 'test'))
+
+shutil.copytree(os.path.join(train_dir, 'image'), os.path.join(yolo_img, 'train'))
+shutil.copytree(os.path.join(val_dir, 'image'), os.path.join(yolo_img, 'val'))
+shutil.copytree(os.path.join(test_dir, 'image'), os.path.join(yolo_img, 'test'))

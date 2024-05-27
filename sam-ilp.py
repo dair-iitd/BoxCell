@@ -27,6 +27,8 @@ from segment_anything.utils.transforms import ResizeLongestSide
 from torch.utils.data.sampler import SubsetRandomSampler
 from datetime import datetime
 import time
+import gc
+from sklearn.cluster import KMeans
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--img_dir_path", type=str)
@@ -39,13 +41,18 @@ parser.add_argument("--nc", type=int, default=5)
 parser.add_argument("--sigma", type=int, default=20)
 parser.add_argument("--split", type=int, default=10)
 parser.add_argument("--model_weights", type=str)
-parser.add_argument("--model_type", type=str, choices = ['vit_b', 'vit_l', 'vit_h'])
-parser.add_argument("--gurobi_license", type=str)
+parser.add_argument("--model_type", type=str, choices = ['vit_b', 'vit_l', 'vit_h'], default='vit_b')
+parser.add_argument("--gurobi_license", type=str, default = None)
+parser.add_argument("--gurobi_license_file", type=str, default = None)
 parser.add_argument("--mode", type=str, choices = ['d-sam', 'sam-ilp'], default = 'sam-ilp')
+parser.add_argument("--type", type=str, choices = ['instance', 'semantic'], default = 'semantic')
 args = parser.parse_args()
 
-env = gp.Env()
-env.setParam('LicenseKey', args.gurobi_license)
+if args.mode == 'sam-ilp':
+    env = gp.Env()
+    os.environ['GRB_LICENSE_FILE']=args.gurobi_license_file
+    env.setParam('LicenseKey', args.gurobi_license)
+
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def show_mask(mask, ax, random_color=False):
@@ -93,7 +100,7 @@ def largest_connected_component(binary_mask):
 
 def eval_image(sam_model, image, file, mode):
     free_mem()
-    mask_save_path = args.saving_dir
+    mask_save_path = args.save_path
     os.makedirs(mask_save_path, exist_ok = True)
     
     img = cv2.imread(image)
@@ -105,26 +112,32 @@ def eval_image(sam_model, image, file, mode):
 
     gt_mask = None
     if args.gt_dir_path != None:
-        gt_mask = np.load(os.path.join(args.gt_dir_path, image.split('.')[0]), allow_pickle = True)
+        gt_mask = np.load(os.path.join(args.gt_dir_path, image.split('/')[-1][:-4]), allow_pickle = True)
     
     d_sam_pred = np.zeros(gt_mask.shape)
-
+        
+    entity = 2
     for enu, i in enumerate(weak_supervision):
         box = i[3:]
         masks, conf, raw_logits = predictor.predict(box = box, multimask_output = False)
-        d_sam_pred += masks[0,:,:]
 
+        if args.type == 'semantic':
+            d_sam_pred += masks[0,:,:]
+        elif args.type == 'instance':
+            to_assign = masks[0,:,:] * entity
+            d_sam_pred = np.where((to_assign > 0), to_assign, mask_raw)
+        entity += 1
+    
     if mode == 'd-sam':
-        dice = np.nan
-        cv2.imwrite(os.path.join(args.save_path, image.split('/').split('\\')[-1]), d_sam_pred > 0)
-        if args.gt_dir_path:
-            dice = compute_dice_coefficient(gt_mask > 0, d_sam_pred> 0)
-        
-        return dice
+        if args.type == 'semantic':
+            cv2.imwrite(os.path.join(args.save_path, image.split('/')[-1].split('\\')[-1]), (d_sam_pred > 0) * 255)
+        elif args.type == 'instance':
+            cv2.imwrite(os.path.join(args.save_path, image.split('/')[-1].split('\\')[-1]), d_sam_pred)
+        return
         
     elif mode == 'sam-ilp':
 
-        sam_s_pred = cv2.imread(os.path.join(args.sam_s_path, image.split('/').split('\\')[-1]))
+        sam_s_pred = cv2.imread(os.path.join(args.sam_s_path, image.split('/')[-1].split('\\')[-1]))
         
         all_fg = img[(d_sam_pred != 0) & (sam_s_pred != 0)]
         all_bg = img[(d_sam_pred == 0) & (sam_s_pred == 0)]
@@ -166,21 +179,43 @@ def eval_image(sam_model, image, file, mode):
                 llh = llh_fg / (llh_bg + llh_fg)
                 final_llh[idx] = llh
 
-        dice = np.nan
-        sam_ilp_pred = solve_ilp(img,sam_s_pred,d_sam_pred,final_llh,gt_mask)
-        cv2.imwrite(os.path.join(args.save_path, image.split('/').split('\\')[-1]), sam_ilp_pred > 0)
-        if args.gt_dir_path:
-            dice = compute_dice_coefficient(gt_mask > 0, sam_ilp_pred> 0)
-        
-        return dice
+        d_sam_component = (d_sam_pred > 0) * 1
+        sam_ilp_pred = solve_ilp(img,sam_s_pred,d_sam_component,final_llh,gt_mask)
 
-def eval_images(sam_model, list_of_images, list_of_bbox, mode):
+        temp = np.where((sam_ilp_pred > 0) & (d_sam_pred > 0), d_sam_pred, sam_ilp_pred)
+        dsam_in_ilp = temp.copy()
+        mask2 = np.where((sam_ilp_pred > 0) & (d_sam_pred > 0), 0, sam_ilp_pred)
+    
+        curr_cells = np.unique(mask)[-1]
+        sem_map, num_sem_map = ndimage.label((mask2+sam_ilp_pred) > 0)
+        
+        for c in range(1,num_sem_map+1):
+            pts = np.unique(sam_ilp_pred[(sem_map == c)])
+            if len(pts) > 1 and pts[0] == 1:
+                num_cells = max(1, len(pts)-1)
+                kmeans = KMeans(n_clusters=num_cells, init=np.array([[j.mean() for j in np.nonzero(sam_ilp_pred == i)] for i in pts[1:]]), n_init=1)
+                x_ones, y_ones = np.nonzero((sem_map == c))
+                kmeans.fit([[x_ones[i], y_ones[i]] for i in range(len(x_ones))])
+                x_ones, y_ones = np.nonzero((sam_ilp_pred == 1) & (sem_map == c))
+                labels = [int(pts[i+1]) for i in kmeans.predict([[x_ones[i], y_ones[i]] for i in range(len(x_ones))])]
+                sam_ilp_pred[x_ones, y_ones] = labels
+            elif pts[0] == 1 and len(pts) == 1:
+                curr_cells += 1
+                sam_ilp_pred[(sem_map == c)] = curr_cells
+            
+        if args.type == 'semantic':
+            cv2.imwrite(os.path.join(args.save_path, image.split('/')[-1].split('\\')[-1]), (sam_ilp_pred > 0) * 255)
+        elif args.type == 'instance':
+            cv2.imwrite(os.path.join(args.save_path, image.split('/')[-1].split('\\')[-1]), sam_ilp_pred)
+        return
+        
+def eval_images(sam_model, list_of_images, mode):
     dices = {}
     for i, image in tqdm(enumerate(list_of_images)):
-        dices[image] = eval_image(sam_model, image, list_of_bbox[i], mode)
+        dices[image] = eval_image(sam_model, image, os.path.join(args.box_dir_path, list_of_images[i].split('.')[0].split('/')[-1]+'.txt'), mode)
 
-    img_dice = sum(dices.values())
-    return dices, img_dice / len(dices)
+    # img_dice = sum(dices.values())
+    # return dices, img_dice / len(dices)
 
 def solve_ilp(img,sam_s_pred,d_sam_pred,llh,gt_mask):
     ln = img.shape[0]
@@ -236,7 +271,5 @@ sam_model = sam_model_registry[args.model_type](checkpoint=args.model_weights).t
 list_of_images = os.listdir(args.img_dir_path)
 list_of_images = [os.path.join(args.img_dir_path, i) for i in list_of_images]
 
-list_of_bboxes = os.listdir(args.box_dir_path)
-list_of_bboxes = [os.path.join(args.box_dir_path, i) for i in list_of_bboxes]
-
-per_img_score, average_score = eval_images(sam_model, list_of_images, list_of_bboxes, args.mode)
+# per_img_score, average_score = eval_images(sam_model, list_of_images, args.mode)
+eval_images(sam_model, list_of_images, args.mode)
