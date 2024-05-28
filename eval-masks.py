@@ -43,7 +43,7 @@ def calculate_iou(boxA, boxB):
     interArea2 = max((boxA[2] - boxA[0]+1) * (boxA[3] - boxA[1]+1), (boxB[2] - boxB[0]+1) * (boxB[3] - boxB[1]+1))
     boxAArea = (boxA[2] - boxA[0]+1) * (boxA[3] - boxA[1]+1)
     boxBArea = (boxB[2] - boxB[0]+1) * (boxB[3] - boxB[1]+1)
-    iou = interArea / float(boxAArea + boxBArea - interArea)
+    iou = interArea / float(boxAArea + boxBArea - interArea2)
     return iou
 
 def evaluate_boxes(gt_boxes, pred_boxes, iou_threshold=0.5):
@@ -138,6 +138,7 @@ for image_id in tqdm(image_ids):
         total_p += precision
         total_r += recall
 
+print(num_images)
 if args.type != 'instance':
     print("Dice:",total_dice/num_images)
     print("IOU:",total_iou/num_images)
