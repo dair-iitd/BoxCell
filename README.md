@@ -1,7 +1,7 @@
 # BoxCell: Leveraging SAM for Cell Segmentation with Box Supervision
 
 
-Official implementation of **BoxCell: Leveraging SAM for Cell Segmentation with Box Supervision** published in *Nature Scientific Reports*.
+Official implementation of **BoxCell: Leveraging SAM for Cell Segmentation with Box Supervision** published in *Nature Scientific Reports* [paper](https://arxiv.org/pdf/2311.17960).
 
 ## 📖 Abstract
 
@@ -51,7 +51,7 @@ BoxCell/
 1. **Clone the repository**:
 ```bash
 git clone https://github.com/Aayushktyagi/BoxCell.git
-
+cd BoxCell
 ```
 
 2. **Install dependencies**:
@@ -63,6 +63,7 @@ pip install scikit-image opencv-python matplotlib
 pip install scipy numpy tqdm
 pip install monai
 ```
+Additionally, install dependencies from [SAM](https://github.com/facebookresearch/segment-anything.git)
 
 3. **Install optimization solvers**:
 
@@ -178,26 +179,16 @@ python eval-masks.py \
 If you use BoxCell in your research, please cite our paper:
 
 ```bibtex
-@article{boxcell2024,
-  title={BoxCell: Leveraging SAM for Cell Segmentation with Box Supervision},
-  author={[Author Names]},
-  journal={Nature Scientific Reports},
-  year={2024},
-  doi={10.1038/s41598-024-76912-9}
+@article{tyagi2023guided,
+  title={Guided Prompting in SAM for Weakly Supervised Cell Segmentation in Histopathological Images},
+  author={Tyagi, Aayush Kumar and Mishra, Vaibhav and others},
+  journal={arXiv preprint arXiv:2311.17960},
+  year={2023}
 }
 ```
 
 
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 - [Segment Anything Model (SAM)](https://github.com/facebookresearch/segment-anything) by Meta AI
 - [Ultralytics YOLO](https://github.com/ultralytics/ultralytics) for object detection
-- Open-source optimization solver communities
-
-## 📧 Contact
-
-For questions and support, please open an issue or contact the authors.
-
----
-
-**Note**: This is the official implementation accompanying our Nature Scientific Reports publication. For the latest updates and additional resources, please check our [Google Drive](https://drive.google.com/drive/folders/1RS4KAmYhNT9y3bHrQ1YLS9D7ubT6aaUZ).
