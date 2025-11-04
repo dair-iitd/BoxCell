@@ -52,10 +52,10 @@ parser.add_argument("--mode", type=str, choices = ['d-sam', 'sam-ilp'], default 
 parser.add_argument("--type", type=str, choices = ['instance', 'semantic'], default = 'semantic')
 args = parser.parse_args()
 
-if args.mode == 'sam-ilp':
-    env = gp.Env()
-    os.environ['GRB_LICENSE_FILE']=args.gurobi_license_file
-    env.setParam('LicenseKey', args.gurobi_license)
+# if args.mode == 'sam-ilp':
+#     env = gp.Env()
+#     os.environ['GRB_LICENSE_FILE']=args.gurobi_license_file
+#     env.setParam('LicenseKey', args.gurobi_license)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -264,7 +264,7 @@ def solve_ilp(img,sam_s_pred,d_sam_pred,llh,gt_mask):
     bt = img.shape[1]
     
     final_masks = np.zeros(img.shape)
-
+    env = gp.Env()
     model = gp.Model("model", env=env)
     model.setParam("TimeLimit", 60)
     model.setParam("OutputFlag", 0)
